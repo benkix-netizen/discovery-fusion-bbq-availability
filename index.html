@@ -144,9 +144,6 @@
         <label>DJ Name</label>
         <select id="dj-name">
           <option value="" selected disabled>Select your name</option>
-          <option value="Buttons">Buttons</option>
-          <option value="Clinton Cai">Clinton Cai</option>
-          <option value="Mu">Mu</option>
         </select>
         <div class="error" id="name-err">Please enter your name.</div>
       </div>
@@ -183,6 +180,7 @@
     const SHEET_ID = "1hgmPI32q6VIGeazKSpR6A_wzwP8l4sQqLMIlfZ2snng";
     const AVAILABILITY_SHEET_NAME = "Availability";
     const SCHEDULE_SHEET_NAME = "Schedule";
+    const DJS_SHEET_NAME = "DJs";
     const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
     const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const DAY_NAMES_LONG = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -217,6 +215,30 @@
         throw new Error(`No valid rows found in the "${SCHEDULE_SHEET_NAME}" tab -- add rows: Day, Label, Start, End.`);
       }
       return byDow;
+    }
+
+    // Reads the DJs tab (Name, Abbreviation, Color, Active) -- lets the
+    // owner add/retire DJs without touching code, same idea as
+    // fetchScheduleDefs(). Rows with Active explicitly "FALSE" are excluded.
+    async function fetchDjRoster() {
+      const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(DJS_SHEET_NAME)}&headers=1`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`DJs fetch failed (${res.status})`);
+      const rows = parseCsv(await res.text());
+      const idx = indexHeader(rows[0]);
+      const names = [];
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const name = (r[idx["Name"]] || "").trim();
+        if (!name) continue;
+        const active = (r[idx["Active"]] || "").trim().toUpperCase();
+        if (active === "FALSE") continue;
+        names.push(name);
+      }
+      if (names.length === 0) {
+        throw new Error(`No active rows found in the "${DJS_SHEET_NAME}" tab -- add rows: Name, Abbreviation, Color, Active.`);
+      }
+      return names;
     }
 
     // Minimal CSV parser: handles quoted fields, embedded commas, and "" escaped quotes.
@@ -526,13 +548,21 @@
     }
 
     async function init() {
+      let djNames;
       try {
-        setsByDay = await fetchScheduleDefs();
+        [setsByDay, djNames] = await Promise.all([fetchScheduleDefs(), fetchDjRoster()]);
       } catch (err) {
         console.error(err);
         document.getElementById("loading-msg").textContent = "Couldn't load the schedule. Please refresh or try again shortly.";
         return;
       }
+      const djSelect = document.getElementById("dj-name");
+      djNames.forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        djSelect.appendChild(opt);
+      });
       document.getElementById("loading-msg").style.display = "none";
       document.getElementById("form-view").style.display = "block";
       showMonthlyQuote();

@@ -168,9 +168,6 @@
         <label>Your name</label>
         <select id="dj-picker">
           <option value="">— None selected —</option>
-          <option value="Buttons">Buttons</option>
-          <option value="Clinton Cai">Clinton Cai</option>
-          <option value="Mu">Mu</option>
         </select>
       </div>
 
@@ -192,6 +189,7 @@
   const SHEET_ID = "1hgmPI32q6VIGeazKSpR6A_wzwP8l4sQqLMIlfZ2snng";
   const AVAILABILITY_SHEET_NAME = "Availability";
   const SWAP_SHEET_NAME = "SwapRequests";
+  const DJS_SHEET_NAME = "DJs";
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxF4Lm6HXqeAfXLq4_y6LQBOptFAT8QmKVy8KjvMzRVMcslnnAnTkkRWCQO72OFiQAz/exec";
   const ORGANIZER_EMAIL = "benki@redlineartistry.com";
   const ORGANIZER_NAME = "Discovery Fusion BBQ";
@@ -263,6 +261,25 @@
     const idx = {};
     headerRow.forEach((name, i) => { idx[name.trim()] = i; });
     return idx;
+  }
+
+  // Reads the DJs tab (Name, Abbreviation, Color, Active) -- lets the owner
+  // add/retire DJs without touching code. Rows with Active explicitly
+  // "FALSE" are excluded. Empty tab/no rows -> empty list, same graceful
+  // fallback fetchCsvOptional() already gives other optional tabs.
+  function buildDjNames(rows) {
+    if (!rows || rows.length === 0) return [];
+    const idx = indexHeader(rows[0]);
+    const names = [];
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const name = (r[idx["Name"]] || "").trim();
+      if (!name) continue;
+      const active = (r[idx["Active"]] || "").trim().toUpperCase();
+      if (active === "FALSE") continue;
+      names.push(name);
+    }
+    return names;
   }
 
   function to12hLabel(hour, minute) {
@@ -866,12 +883,20 @@
 
   async function main() {
     try {
-      const [availabilityRows, swapRows] = await Promise.all([
+      const [availabilityRows, swapRows, djRows] = await Promise.all([
         fetchCsv(AVAILABILITY_SHEET_NAME),
-        fetchCsvOptional(SWAP_SHEET_NAME)
+        fetchCsvOptional(SWAP_SHEET_NAME),
+        fetchCsvOptional(DJS_SHEET_NAME)
       ]);
       currentEmailMap = buildEmailMap(availabilityRows);
       currentSwapMap = parseSwapMap(swapRows);
+      const picker = document.getElementById("dj-picker");
+      buildDjNames(djRows).forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        picker.appendChild(opt);
+      });
       initControls();
       initMonthNavArrows();
       const now = new Date();
